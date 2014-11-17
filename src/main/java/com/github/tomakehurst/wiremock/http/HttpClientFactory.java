@@ -18,11 +18,18 @@ package com.github.tomakehurst.wiremock.http;
 import com.github.tomakehurst.wiremock.common.ProxySettings;
 import org.apache.http.HttpHost;
 import org.apache.http.client.HttpClient;
+import org.apache.http.config.Registry;
+import org.apache.http.config.RegistryBuilder;
 import org.apache.http.config.SocketConfig;
+import org.apache.http.conn.socket.ConnectionSocketFactory;
+import org.apache.http.conn.socket.PlainConnectionSocketFactory;
 import org.apache.http.conn.ssl.AllowAllHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLContextBuilder;
 import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 
 import javax.net.ssl.SSLContext;
 
@@ -36,12 +43,21 @@ public class HttpClientFactory {
     public static HttpClient createClient(
             int maxConnections, int timeoutMilliseconds, ProxySettings proxySettings) {
 
-        HttpClientBuilder builder = HttpClientBuilder.create()
+        Registry<ConnectionSocketFactory> registry = RegistryBuilder.<ConnectionSocketFactory>create()
+                .register("http", PlainConnectionSocketFactory.getSocketFactory())
+                .register("https", SSLConnectionSocketFactory.getSystemSocketFactory())
+                .build();
+
+        PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager(registry);
+        connectionManager.setDefaultMaxPerRoute(maxConnections);
+        connectionManager.setMaxTotal(maxConnections);
+        HttpClientBuilder builder = HttpClients.custom()
+                .setConnectionManager(connectionManager)
+                .useSystemProperties()
                 .disableAuthCaching()
                 .disableAutomaticRetries()
                 .disableCookieManagement()
                 .disableRedirectHandling()
-                .setMaxConnTotal(maxConnections)
                 .setDefaultSocketConfig(SocketConfig.custom().setSoTimeout(timeoutMilliseconds).build())
                 .setSslcontext(buildAllowAnythingSSLContext())
                 .setHostnameVerifier(new AllowAllHostnameVerifier());
